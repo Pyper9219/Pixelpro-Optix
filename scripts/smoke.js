@@ -46,11 +46,16 @@ async function api(path, { method = 'GET', token, body, form } = {}) {
   return { status: res.status, data };
 }
 
-async function dropTestDb() {
+/* Atlas users are usually not granted dropDatabase, so empty the collections
+   instead — the throwaway database then costs nothing. */
+async function clearTestDb() {
   const client = new MongoClient(process.env.MONGODB_URI);
   try {
     await client.connect();
-    await client.db(DB).dropDatabase();
+    const db = client.db(DB);
+    const collections = await db.listCollections().toArray();
+    for (const { name } of collections) await db.collection(name).deleteMany({});
+    return collections.length;
   } finally {
     await client.close();
   }
@@ -68,9 +73,12 @@ async function dropTestDb() {
     await runSuite();
   } finally {
     child.kill();
-    await dropTestDb().catch((error) => console.error(`could not drop ${DB}: ${error.message}`));
+    const cleared = await clearTestDb().catch((error) => {
+      console.error(`could not clear the test db ${DB}: ${error.message}`);
+      return 0;
+    });
+    console.log(`\n${passed} passed, ${failed} failed  (test db ${DB}: ${cleared} collections emptied)`);
   }
-  console.log(`\n${passed} passed, ${failed} failed  (test db ${DB} dropped)`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('SMOKE TEST CRASH', e); process.exit(1); });
 

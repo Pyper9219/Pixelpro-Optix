@@ -16,7 +16,7 @@ Copy `.env.example` to `.env` and fill in:
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | Atlas connection string (allowlist your IP / `0.0.0.0/0`) |
-| `MONGODB_DB` | Database name, default `aviator-web` |
+| `MONGODB_DB` | Database name, default `riamxo` |
 | `RIAMXO_SECRET` | Session-signing secret — must be identical on every instance or logins drop on cold starts |
 
 Indexes are created on boot. In Vercel, set the same three variables under Project → Settings → Environment Variables.
