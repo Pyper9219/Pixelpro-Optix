@@ -63,7 +63,8 @@ async function clearTestDb() {
 
 (async () => {
   const child = spawn(process.execPath, ['server.js'], {
-    env: { ...process.env, PORT: String(PORT), MONGODB_DB: DB, RIAMXO_SECRET: 'smoke-secret' },
+    /* No env secret: tokens must be signed with the one stored in app_meta. */
+    env: { ...process.env, PORT: String(PORT), MONGODB_DB: DB, RIAMXO_SECRET: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));

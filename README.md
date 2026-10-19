@@ -17,9 +17,9 @@ Copy `.env.example` to `.env` and fill in:
 | --- | --- |
 | `MONGODB_URI` | Atlas connection string (allowlist your IP / `0.0.0.0/0`) |
 | `MONGODB_DB` | Database name, default `riamxo` |
-| `RIAMXO_SECRET` | Session-signing secret — must be identical on every instance or logins drop on cold starts |
+| `RIAMXO_SECRET` | Optional seed for the session-signing secret. The live secret is stored in the `app_meta` collection on first boot so every serverless instance signs with the same key |
 
-Indexes are created on boot. In Vercel, set the same three variables under Project → Settings → Environment Variables.
+Indexes are created on boot. In Vercel, set at least `MONGODB_URI` under Project → Settings → Environment Variables.
 
 ## Getting started
 
