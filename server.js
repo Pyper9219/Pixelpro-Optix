@@ -9,6 +9,7 @@ const notificationRoutes = require('./routes/notifications');
 const statsRoutes = require('./routes/stats');
 const adminRoutes = require('./routes/admin');
 const { load } = require('./lib/db');
+const { UPLOAD_DIR } = require('./lib/paths');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,7 @@ app.use('/api/admin', adminRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
+app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res) => {
@@ -39,6 +41,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Riamxo Motors app running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Riamxo Motors app running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
