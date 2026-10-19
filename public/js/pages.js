@@ -276,7 +276,7 @@ window.Pages = (() => {
           submissions.length === 0
             ? emptyState('image', 'No submissions yet', 'Post the sponsor ad and submit your first view count.')
             : submissions.map((s) => h('div', { class: 'submission-item' },
-                h('img', { src: s.image_url, alt: 'Proof screenshot' }),
+                proofThumb(s),
                 h('div', {},
                   h('b', {}, `${s.views.toLocaleString()} views`),
                   h('small', {}, `${s.phone_number} · ${fmtDate(s.created_at)}`)),
@@ -360,6 +360,27 @@ window.Pages = (() => {
     }
 
     return page;
+  }
+
+  /* Proof screenshots live inline in the database, so the list omits them and
+     each thumbnail fetches its own on tap. */
+  function proofThumb(sub) {
+    let cached = null;
+    async function open() {
+      if (!cached) {
+        try {
+          cached = (await API.get(`/api/submissions/${sub.id}`)).submission.image_url;
+        } catch (e) {
+          toast(e.message);
+          return;
+        }
+      }
+      openModal(null, h('div', { class: 'ad-lightbox' },
+        h('img', { src: cached, alt: 'Proof screenshot' }),
+        h('b', {}, `${sub.views.toLocaleString()} views`),
+        h('p', {}, `${sub.phone_number} · ${fmtDate(sub.created_at)}`)));
+    }
+    return h('button', { class: 'proof-thumb', onclick: open, 'aria-label': 'View proof screenshot' }, icon('image', 18));
   }
 
   /* ---------- sponsor ad creative (uploaded by admin) ---------- */

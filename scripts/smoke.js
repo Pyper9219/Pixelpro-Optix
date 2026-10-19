@@ -1,13 +1,13 @@
-/* End-to-end smoke test — spawns its own server on PORT 3100 with an isolated
-   data dir, runs the suite, then shuts down. Safe to run anytime. */
+/* End-to-end smoke test — spawns its own server on PORT 3100 against a throwaway
+   MongoDB database, runs the suite, then drops that database. Safe to run anytime. */
 const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const { MongoClient } = require('mongodb');
+
+if (!process.env.MONGODB_URI) { try { process.loadEnvFile(); } catch { /* no local .env */ } }
 
 const PORT = 3100;
 const BASE = `http://localhost:${PORT}`;
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'riamxo-test-'));
+const DB = `riamxo_smoke_${Date.now()}`;
 
 let passed = 0;
 let failed = 0;
@@ -46,9 +46,19 @@ async function api(path, { method = 'GET', token, body, form } = {}) {
   return { status: res.status, data };
 }
 
+async function dropTestDb() {
+  const client = new MongoClient(process.env.MONGODB_URI);
+  try {
+    await client.connect();
+    await client.db(DB).dropDatabase();
+  } finally {
+    await client.close();
+  }
+}
+
 (async () => {
   const child = spawn(process.execPath, ['server.js'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: TMP },
+    env: { ...process.env, PORT: String(PORT), MONGODB_DB: DB, RIAMXO_SECRET: 'smoke-secret' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
@@ -58,9 +68,9 @@ async function api(path, { method = 'GET', token, body, form } = {}) {
     await runSuite();
   } finally {
     child.kill();
-    try { fs.rmSync(TMP, { recursive: true, force: true }); } catch { /* ignore */ }
+    await dropTestDb().catch((error) => console.error(`could not drop ${DB}: ${error.message}`));
   }
-  console.log(`\n${passed} passed, ${failed} failed`);
+  console.log(`\n${passed} passed, ${failed} failed  (test db ${DB} dropped)`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('SMOKE TEST CRASH', e); process.exit(1); });
 
@@ -116,9 +126,15 @@ async function runSuite() {
   const list = await api('/api/submissions', { token: userToken });
   check('GET submissions + cooldown_ms present', list.status === 200 && list.data.cooldown_ms > 0 && list.data.submissions.length === 1);
 
-  // uploaded image is publicly served
-  const imgRes = await fetch(`${BASE}${sub.data.submission.image_url}`);
-  check('uploaded screenshot served', imgRes.status === 200);
+  check('list omits the inline screenshot payload', list.data.submissions[0].image_url === undefined);
+  const proof = await api(`/api/submissions/${sub.data.submission.id}`, { token: userToken });
+  check('proof loads on demand', proof.status === 200 && String(proof.data.submission.image_url).startsWith('data:image/png'));
+  const foreignProof = await api(`/api/submissions/${sub.data.submission.id}`, { token: adminToken });
+  check("another user's proof is not reachable", foreignProof.status === 404);
+
+  // screenshot is stored inline so any instance can serve it
+  check('screenshot stored as data URL', String(sub.data.submission.image_url).startsWith('data:image/png'),
+    String(sub.data.submission.image_url).slice(0, 40));
 
   // stats
   const stats = await api('/api/stats/dashboard', { token: userToken });

@@ -4,18 +4,34 @@ Riamxo Motors Limited — Kenya-focused advertising revenue web app. Members pos
 
 ## Stack
 
-- **Backend:** Node.js + Express 4, JSON file database (no external DB needed)
+- **Backend:** Node.js + Express 4, MongoDB (Atlas) — screenshots and ad creatives are stored inline as data URLs
 - **Frontend:** Vanilla JS single-page app (hash router, Tailwind-style CSS), Canvas 2D crash game
 - **Auth:** scrypt password hashing + HMAC-SHA256 session tokens
 - **Admin:** first registered user becomes admin; approves withdrawals & deposits
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI` | Atlas connection string (allowlist your IP / `0.0.0.0/0`) |
+| `MONGODB_DB` | Database name, default `aviator-web` |
+| `RIAMXO_SECRET` | Session-signing secret — must be identical on every instance or logins drop on cold starts |
+
+Indexes are created on boot. In Vercel, set the same three variables under Project → Settings → Environment Variables.
 
 ## Getting started
 
 ```bash
 npm install
 npm start        # http://localhost:3000
-npm test         # self-contained smoke suite (spawns its own server on :3100)
+npm test         # smoke suite: spawns its own server against a throwaway database, then drops it
+node scripts/migrate-to-mongo.js --admin=you@example.com   # one-off import of data/db.json
 ```
+
+> `npm test` needs a reachable MongoDB. For a disposable local instance:
+> `npm i --no-save mongodb-memory-server` and run the suite with `MONGODB_URI` pointed at it.
 
 ## Features
 

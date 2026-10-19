@@ -491,6 +491,8 @@ html.light .bottomnav { background: rgba(255, 255, 255, 0.94); }
 
 .submission-item { display: flex; gap: 14px; padding: 13px; border: 1px solid var(--border); border-radius: 18px; margin-bottom: 11px; background: var(--card); align-items: center; }
 .submission-item img { width: 58px; height: 58px; object-fit: cover; border-radius: 12px; flex: none; }
+.proof-thumb { width: 58px; height: 58px; flex: none; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.proof-thumb:hover { color: var(--gold); border-color: var(--gold); }
 .submission-item b { font-size: 0.88rem; }
 .submission-item small { color: var(--muted); display: block; font-size: 0.72rem; }
 .submission-item .earnings { margin-left: auto; color: var(--lime); font-weight: 900; white-space: nowrap; }

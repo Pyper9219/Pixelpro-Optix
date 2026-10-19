@@ -1,31 +1,29 @@
 const express = require('express');
-const { db } = require('../lib/db');
-const { requireAuth } = require('../lib/middleware');
+const { list, byId, countDocs, updateById, updateMany } = require('../lib/mongo');
+const { requireAuth, route } = require('../lib/middleware');
 
 const router = express.Router();
 
-router.get('/', requireAuth, (req, res) => {
-  const notifications = db
-    .collection('notifications')
-    .find((n) => n.user_id === req.user.id)
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 30);
-  const unread = notifications.filter((n) => !n.read).length;
+router.get('/', requireAuth, route(async (req, res) => {
+  const notifications = await list('notifications', { user_id: req.user.id },
+    { sort: { created_at: -1 }, limit: 30 });
+  const unread = await countDocs('notifications', { user_id: req.user.id, read: false });
   res.json({ notifications, unread });
-});
+}));
 
-router.post('/read', requireAuth, (req, res) => {
+router.post('/read', requireAuth, route(async (req, res) => {
   const id = String(req.body.id || '');
-  const n = db.collection('notifications').byId(id);
+  const n = await byId('notifications', id);
   if (!n || n.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
-  db.collection('notifications').update(id, { read: true });
+  await updateById('notifications', id, { read: true });
   res.json({ ok: true });
-});
+}));
 
-router.post('/read-all', requireAuth, (req, res) => {
-  const mine = db.collection('notifications').find((n) => n.user_id === req.user.id && !n.read);
-  for (const n of mine) db.collection('notifications').update(n.id, { read: true });
-  res.json({ ok: true, updated: mine.length });
-});
+router.post('/read-all', requireAuth, route(async (req, res) => {
+  const query = { user_id: req.user.id, read: false };
+  const updated = await countDocs('notifications', query);
+  if (updated) await updateMany('notifications', query, { read: true });
+  res.json({ ok: true, updated });
+}));
 
 module.exports = router;

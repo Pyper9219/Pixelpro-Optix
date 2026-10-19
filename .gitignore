@@ -1,6 +1,9 @@
 node_modules/
 data/
 public/uploads/
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store
 

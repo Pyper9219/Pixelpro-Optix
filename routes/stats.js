@@ -1,13 +1,16 @@
 const express = require('express');
-const { db } = require('../lib/db');
-const { requireAuth } = require('../lib/middleware');
+const { list } = require('../lib/mongo');
+const { requireAuth, route } = require('../lib/middleware');
 
 const router = express.Router();
 
-function computeStats(userId) {
-  const submissions = db.collection('submissions').find((s) => s.user_id === userId);
-  const withdrawals = db.collection('withdrawals').find((w) => w.user_id === userId);
-  const deposits = db.collection('deposits').find((d) => d.user_id === userId);
+async function computeStats(userId) {
+  const earningsOnly = { projection: { views: 1, earnings: 1 } };
+  const [submissions, withdrawals, deposits] = await Promise.all([
+    list('submissions', { user_id: userId }, earningsOnly),
+    list('withdrawals', { user_id: userId }),
+    list('deposits', { user_id: userId }),
+  ]);
 
   const whatsappEarned = submissions.reduce((sum, s) => sum + s.earnings, 0);
   const totalViews = submissions.reduce((sum, s) => sum + s.views, 0);
@@ -62,8 +65,8 @@ function computeStats(userId) {
   };
 }
 
-router.get('/dashboard', requireAuth, (req, res) => {
-  res.json(computeStats(req.user.id));
-});
+router.get('/dashboard', requireAuth, route(async (req, res) => {
+  res.json(await computeStats(req.user.id));
+}));
 
 module.exports = router;
