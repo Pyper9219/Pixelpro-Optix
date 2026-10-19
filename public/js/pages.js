@@ -195,7 +195,7 @@ window.Pages = (() => {
         h('h2', { style: { textAlign: 'center' } }, isReg ? 'Create your account' : 'Welcome back'),
         h('p', { class: 'sub', style: { textAlign: 'center' } },
           isReg ? 'Start earning KES 100 per WhatsApp status view.' : 'Log in to your Riamxo Motors account.'),
-        nameInput, phoneInput,
+        ...[nameInput, phoneInput].filter(Boolean),
         field('Email address', h('input', { class: 'input', id: 'au-email', type: 'email', placeholder: 'you@example.com' })),
         field('Password', h('input', { class: 'input', id: 'au-pass', type: 'password', placeholder: isReg ? 'At least 6 characters' : 'Your password' })),
         h('div', { class: 'error-text', id: 'au-err', style: { display: 'none', marginBottom: '12px' } }),
@@ -249,40 +249,43 @@ window.Pages = (() => {
 
     const body = page.querySelector('#home-body');
 
-    API.get('/api/submissions').then(({ submissions, rate_per_view, cooldown_ms }) => {
-      body.innerHTML = '';
+    Promise.all([
+      API.get('/api/submissions'),
+      API.get('/api/sponsor-ads').catch(() => ({ ads: [] })),
+    ])
+      .then(([subData, adData]) => {
+        const { submissions, rate_per_view, cooldown_ms } = subData;
+        const ads = adData.ads || [];
+        body.innerHTML = '';
 
-      const banner = h('div', { class: 'balance-hero', style: { marginBottom: '18px' } },
-        h('small', {}, 'Today\'s sponsor ad'),
-        h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginTop: '10px' } },
-          h('div', { style: { width: '52px', height: '52px', borderRadius: '14px', background: 'linear-gradient(135deg,var(--yellow),var(--gold))', display: 'grid', placeItems: 'center', color: '#161616', flex: 'none' } }, icon('briefcase', 26)),
-          h('div', {},
-            h('b', { style: { fontSize: '1.05rem' } }, 'Riamxo Motors — Festive Sale Campaign'),
-            h('div', { class: 'sub' }, 'Keep it on your status for 24 hours, then screenshot the views.'))));
+        const banner = ads.length ? sponsorAdCard(ads[0], rate_per_view) : waitingForAd();
 
-      if (cooldown_ms > 0) {
-        const hrs = cooldown_ms / 3600000;
-        body.append(banner,
-          h('div', { class: 'cooldown-banner' }, icon('clock', 20),
-            h('span', {}, `Next submission available in ${hrs.toFixed(1)} hours. Your last submission is being processed.`)));
-      } else {
-        body.append(banner, buildForm(rate_per_view));
-      }
+        if (cooldown_ms > 0) {
+          const hrs = cooldown_ms / 3600000;
+          body.append(banner,
+            h('div', { class: 'cooldown-banner' }, icon('clock', 20),
+              h('span', {}, `Next submission available in ${hrs.toFixed(1)} hours. Your last submission is being processed.`)));
+        } else {
+          body.append(banner, buildForm(rate_per_view));
+        }
 
-      body.append(h('div', { class: 'panel', style: { marginTop: '18px' } },
-        h('h3', {}, 'My submissions', h('small', {}, `${submissions.length} total`)),
-        submissions.length === 0
-          ? emptyState('image', 'No submissions yet', 'Post the sponsor ad and submit your first view count.')
-          : submissions.map((s) => h('div', { class: 'submission-item' },
-              h('img', { src: s.image_url, alt: 'Proof screenshot' }),
-              h('div', {},
-                h('b', {}, `${s.views.toLocaleString()} views`),
-                h('small', {}, `${s.phone_number} · ${fmtDate(s.created_at)}`)),
-              h('span', { class: 'earnings' }, `+${fmtKES(s.earnings)}`)))));
-    }).catch((e) => {
-      body.innerHTML = '';
-      body.append(emptyState('alert', e.message, ''));
-    });
+        if (ads.length > 1) body.append(otherCampaigns(ads.slice(1)));
+
+        body.append(h('div', { class: 'panel', style: { marginTop: '18px' } },
+          h('h3', {}, 'My submissions', h('small', {}, `${submissions.length} total`)),
+          submissions.length === 0
+            ? emptyState('image', 'No submissions yet', 'Post the sponsor ad and submit your first view count.')
+            : submissions.map((s) => h('div', { class: 'submission-item' },
+                h('img', { src: s.image_url, alt: 'Proof screenshot' }),
+                h('div', {},
+                  h('b', {}, `${s.views.toLocaleString()} views`),
+                  h('small', {}, `${s.phone_number} · ${fmtDate(s.created_at)}`)),
+                h('span', { class: 'earnings' }, `+${fmtKES(s.earnings)}`)))));
+      })
+      .catch((e) => {
+        body.innerHTML = '';
+        body.append(emptyState('alert', e.message, ''));
+      });
 
     function buildForm(rate) {
       let file = null;
@@ -359,6 +362,69 @@ window.Pages = (() => {
     return page;
   }
 
+  /* ---------- sponsor ad creative (uploaded by admin) ---------- */
+  function adFileName(ad) {
+    const slug = String(ad.title).toLowerCase().replace(/^riamxo[-\s]+/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'sponsor-ad';
+    const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' })[ad.media_type] || 'jpg';
+    return `riamxo-${slug}.${ext}`;
+  }
+
+  function viewAd(ad) {
+    openModal(null, h('div', { class: 'ad-lightbox' },
+      h('img', { src: ad.image_url, alt: ad.title }),
+      h('b', {}, ad.title),
+      h('p', {}, ad.caption),
+      h('div', { class: 'sa-actions' },
+        h('a', { class: 'btn btn-gold btn-sm', href: ad.image_url, download: adFileName(ad) }, icon('download', 16), 'Save image'),
+        h('button', { class: 'btn btn-ghost btn-sm', onclick: () => copyText(ad.caption, 'Caption copied') }, icon('copy', 16), 'Copy caption'))));
+  }
+
+  function sponsorAdCard(ad, rate) {
+    return h('div', { class: 'sponsor-ad' },
+      h('div', { class: 'sa-top' },
+        h('span', { class: 'sa-kicker' }, icon('sparkles', 14), 'Today\'s sponsor ad'),
+        h('span', { class: 'sa-rate' }, `${fmtKES(rate)} / view`)),
+      h('button', { class: 'sa-stage', onclick: () => viewAd(ad), 'aria-label': `Open ${ad.title}` },
+        h('img', { src: ad.image_url, alt: ad.title }),
+        h('span', { class: 'sa-zoom' }, icon('eye', 15), 'Tap to open')),
+      h('div', { class: 'sa-meta' },
+        h('b', {}, ad.title),
+        h('p', {}, ad.caption),
+        h('small', {}, `${timeAgo(ad.created_at)} · ${ad.member_posts} submission${ad.member_posts === 1 ? '' : 's'} since launch`)),
+      h('div', { class: 'sa-actions' },
+        h('a', { class: 'btn btn-gold btn-sm', href: ad.image_url, download: adFileName(ad) }, icon('download', 16), 'Save creative'),
+        h('button', { class: 'btn btn-ghost btn-sm', onclick: () => copyText(ad.caption, 'Caption copied — paste it on your status') }, icon('copy', 16), 'Copy caption'),
+        h('a', { class: 'btn btn-ghost btn-sm', href: `https://wa.me/?text=${encodeURIComponent(ad.caption)}`, target: '_blank', rel: 'noopener' }, icon('send', 16), 'Share')));
+  }
+
+  function otherCampaigns(ads) {
+    return h('div', { class: 'panel', style: { marginTop: '18px' } },
+      h('h3', {}, 'Other live campaigns', h('small', {}, `${ads.length} available`)),
+      h('div', { class: 'sa-strip' }, ads.map((ad) =>
+        h('button', { class: 'sa-chip', onclick: () => viewAd(ad) },
+          h('img', { src: ad.image_url, alt: ad.title }),
+          h('span', {}, ad.title)))));
+  }
+
+  function campaignStrip(ad) {
+    return h('button', { class: 'ad-strip', onclick: () => viewAd(ad) },
+      h('img', { src: ad.image_url, alt: '' }),
+      h('span', { class: 'ads-txt' },
+        h('small', {}, 'Live sponsor ad · post it to earn'),
+        h('b', {}, ad.title)),
+      h('span', { class: 'ads-go' }, icon('chevRight', 18)));
+  }
+
+  function waitingForAd() {
+    return h('div', { class: 'balance-hero', style: { marginBottom: '18px' } },
+      h('small', {}, 'Today\'s sponsor ad'),
+      h('div', { style: { display: 'flex', gap: '14px', alignItems: 'center', marginTop: '10px' } },
+        h('div', { style: { width: '52px', height: '52px', borderRadius: '14px', background: 'linear-gradient(135deg,var(--yellow),var(--gold))', display: 'grid', placeItems: 'center', color: '#161616', flex: 'none' } }, icon('briefcase', 26)),
+        h('div', {},
+          h('b', { style: { fontSize: '1.05rem' } }, 'No creative published yet'),
+          h('div', { class: 'sub' }, 'The admin team will drop today\'s product image here — check back shortly to start earning.'))));
+  }
+
   /* ================= DASHBOARD ================= */
   function dashboard() {
     const page = h('div', { class: 'page page-pad' },
@@ -368,7 +434,8 @@ window.Pages = (() => {
 
     const body = page.querySelector('#dash-body');
 
-    API.get('/api/stats/dashboard').then((stats) => {
+    API.get('/api/stats/dashboard').then(async (stats) => {
+      const adData = await API.get('/api/sponsor-ads').catch(() => ({ ads: [] }));
       body.innerHTML = '';
       const s = stats.summary;
 
@@ -414,6 +481,9 @@ window.Pages = (() => {
                     icon(a.status === 'approved' ? 'check' : a.status === 'pending' ? 'clock' : 'x', 17)),
                   h('div', {}, h('b', {}, `${a.method} withdrawal`), h('small', {}, timeAgo(a.created_at))),
                   h('div', { class: 'act-amt' }, h('b', {}, fmtKES(a.amount)), statusPill(a.status, { approved: 'Successful' })))))));
+
+      const liveAd = (adData.ads || [])[0];
+      if (liveAd) body.insertBefore(campaignStrip(liveAd), body.children[1]);
 
       Charts.renderStackedArea(page.querySelector('#dash-trend'), stats.trend, [
         { key: 'approved', label: 'Approved', color: '#22c55e' },
@@ -779,8 +849,9 @@ window.Pages = (() => {
   function admin() {
     const page = h('div', { class: 'page page-pad' },
       h('h1', { class: 'page-title' }, 'Admin Panel'),
-      h('p', { class: 'page-sub' }, 'Approve or reject pending withdrawal and activation requests.'),
-      h('div', { id: 'ad-body', style: { marginTop: '18px' } }, h('div', { class: 'spinner' })));
+      h('p', { class: 'page-sub' }, 'Approve withdrawals and activations, and publish the sponsor creatives members post to their status.'),
+      h('div', { id: 'ad-body', style: { marginTop: '18px' } }, h('div', { class: 'spinner' })),
+      adStudio());
 
     function load() {
       const body = page.querySelector('#ad-body');
@@ -830,6 +901,111 @@ window.Pages = (() => {
 
     load();
     return page;
+  }
+
+  /* ================= ADMIN: SPONSOR AD STUDIO ================= */
+  function adStudio() {
+    const section = h('div', { class: 'panel', style: { marginTop: '16px' } },
+      h('h3', {}, 'Sponsor ad studio', h('small', {}, 'Publish product creatives to every member')),
+      h('div', { id: 'ad-studio' }));
+    const host = section.querySelector('#ad-studio');
+    let file = null;
+
+    async function refresh() {
+      host.innerHTML = '';
+      host.append(h('div', { class: 'spinner' }));
+      let ads = [];
+      try {
+        ({ ads } = await API.get('/api/sponsor-ads/all'));
+      } catch (e) {
+        host.innerHTML = '';
+        host.append(emptyState('alert', e.message, ''));
+        return;
+      }
+      host.innerHTML = '';
+      host.append(buildUploader(), buildList(ads));
+    }
+
+    function buildUploader() {
+      const preview = h('div', {});
+      const input = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
+      const dz = h('div', { class: 'dropzone' },
+        h('div', { class: 'dz-ic' }, icon('upload', 22)),
+        h('b', { style: { fontSize: '0.88rem' } }, 'Product image'),
+        h('div', { style: { fontSize: '0.74rem', marginTop: '3px' } }, 'PNG, JPG, WEBP or GIF · max 2MB'),
+        preview);
+      dz.append(input);
+      dz.addEventListener('click', () => input.click());
+      input.addEventListener('change', () => input.files[0] && pick(input.files[0]));
+
+      function pick(f) {
+        if (!f.type.startsWith('image/')) return toast('Please choose an image file', 'error');
+        if (f.size > 2 * 1024 * 1024) return toast('Image must be under 2MB', 'error');
+        file = f;
+        preview.innerHTML = '';
+        preview.append(h('img', { src: URL.createObjectURL(f), alt: 'preview' }));
+      }
+
+      const title = h('input', { class: 'input', maxlength: '90', placeholder: 'e.g. Riamxo Motors — Festive Sale' });
+      const caption = h('textarea', { class: 'input', rows: '3', maxlength: '300', placeholder: 'Caption members paste on their status' });
+
+      const submit = h('button', { class: 'btn btn-gold btn-block', style: { marginTop: '6px' }, onclick: publish }, 'Publish to all members');
+
+      async function publish() {
+        const t = title.value.trim();
+        if (!t) return toast('Give the campaign a title', 'error');
+        if (!file) return toast('Attach the product image', 'error');
+        const fd = new FormData();
+        fd.append('title', t);
+        fd.append('caption', caption.value.trim());
+        fd.append('image', file);
+        submit.disabled = true;
+        submit.textContent = 'Publishing…';
+        try {
+          await API.post('/api/sponsor-ads', fd);
+          toast('Sponsor ad is live for every member.');
+          file = null;
+          refresh();
+        } catch (e) {
+          toast(e.message, 'error');
+          submit.disabled = false;
+          submit.textContent = 'Publish to all members';
+        }
+      }
+
+      return h('div', { class: 'form-panel', style: { marginBottom: '16px' } },
+        h('div', { class: 'field' }, h('label', {}, 'Campaign title'), title),
+        h('div', { class: 'field' }, h('label', {}, 'Caption'), caption),
+        h('div', { class: 'field' }, h('label', {}, 'Creative'), dz),
+        submit);
+    }
+
+    function buildList(ads) {
+      if (ads.length === 0) {
+        return h('p', { style: { color: 'var(--muted)', fontSize: '0.85rem' } }, 'No creatives published yet.');
+      }
+      return h('div', { class: 'ad-list' }, ads.map((ad) => h('div', { class: 'ad-item' },
+        h('img', { class: 'ad-thumb', src: ad.image_url, alt: ad.title }),
+        h('div', { class: 'ad-info' },
+          h('b', {}, ad.title),
+          h('small', {}, `${timeAgo(ad.created_at)} · ${ad.caption.slice(0, 60)}${ad.caption.length > 60 ? '…' : ''}`)),
+        h('span', { class: `pill ${ad.active ? 'pill-approved' : 'pill-rejected'}` }, ad.active ? 'Live' : 'Hidden'),
+        h('div', { class: 'a-actions' },
+          h('button', {
+            class: 'a-btn ok', onclick: async () => {
+              try { await API.post(`/api/sponsor-ads/${ad.id}/toggle`); refresh(); } catch (e) { toast(e.message, 'error'); }
+            },
+          }, ad.active ? 'Hide' : 'Show'),
+          h('button', {
+            class: 'a-btn no', onclick: async () => {
+              if (!confirm(`Delete "${ad.title}"?`)) return;
+              try { await API.post(`/api/sponsor-ads/${ad.id}/delete`); toast('Creative deleted.'); refresh(); } catch (e) { toast(e.message, 'error'); }
+            },
+          }, 'Delete')))));
+    }
+
+    refresh();
+    return section;
   }
 
   /* ================= 404 ================= */

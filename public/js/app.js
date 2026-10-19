@@ -248,6 +248,18 @@ window.App = (() => {
   /* ---------- boot ---------- */
   window.addEventListener('hashchange', render);
 
+  window.addEventListener('riamxo:expired', (e) => {
+    user = null;
+    authChecked = true;
+    const route = currentRoute();
+    if (route !== null && !['', '/', '/auth', '/faq'].includes(route)) {
+      toast((e.detail || 'Session expired') + ' — signing you in again.', 'error');
+      location.hash = '#/auth';
+      return;
+    }
+    render();
+  });
+
   (async () => {
     render(); // immediate spinner-free first paint handled by landing
     await checkAuth();

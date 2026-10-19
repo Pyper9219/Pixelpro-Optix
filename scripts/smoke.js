@@ -183,4 +183,46 @@ async function runSuite() {
   // data isolation between users
   const otherStats = await api('/api/stats/dashboard', { token: adminToken });
   check('member data isolated from other users', otherStats.data.summary.whatsapp_earned === 0);
+
+  // sponsor ads: admin publishes a creative, every member can read it
+  const adForm = new FormData();
+  adForm.append('title', 'Riamxo Motors — Festive Sale');
+  adForm.append('caption', 'Book a test drive this week and save 20%.');
+  adForm.append('image', new Blob([png], { type: 'image/png' }), 'ad.png');
+  const memberPublish = await api('/api/sponsor-ads', { method: 'POST', token: userToken, form: adForm });
+  check('member cannot publish sponsor ads (403)', memberPublish.status === 403);
+
+  const textOnly = new FormData();
+  textOnly.append('title', 'No image');
+  const adNoFile = await api('/api/sponsor-ads', { method: 'POST', token: adminToken, form: textOnly });
+  check('sponsor ad without image rejected', adNoFile.status === 400);
+
+  const ad = await api('/api/sponsor-ads', { method: 'POST', token: adminToken, form: adForm });
+  check('admin publishes sponsor ad', ad.status === 201 && ad.data.ad.title === 'Riamxo Motors — Festive Sale', JSON.stringify(ad.data));
+
+  const memberAds = await api('/api/sponsor-ads', { token: userToken });
+  check('member sees the live creative', memberAds.status === 200 && memberAds.data.ads.length === 1, JSON.stringify(memberAds.data));
+  check('creative is readable inline (data URL)', String(memberAds.data.ads[0].image_url).startsWith('data:image/png'));
+
+  const anonAds = await api('/api/sponsor-ads');
+  check('sponsor ads require auth', anonAds.status === 401);
+
+  const hide = await api(`/api/sponsor-ads/${ad.data.ad.id}/toggle`, { method: 'POST', token: adminToken });
+  check('admin hides the ad', hide.status === 200 && hide.data.ad.active === false);
+  const afterHide = await api('/api/sponsor-ads', { token: userToken });
+  check('hidden ad is withdrawn from members', afterHide.data.ads.length === 0);
+
+  const show = await api(`/api/sponsor-ads/${ad.data.ad.id}/toggle`, { method: 'POST', token: adminToken });
+  check('admin re-publishes the ad', show.status === 200 && show.data.ad.active === true);
+
+  const adNotif = await api('/api/notifications', { token: userToken });
+  check('members notified about the new ad', adNotif.data.notifications.some((n) => n.title === 'New sponsor ad is live'));
+
+  const del = await api(`/api/sponsor-ads/${ad.data.ad.id}/delete`, { method: 'POST', token: adminToken });
+  check('admin deletes the ad', del.status === 200 && del.data.removed === true);
+  const allAfterDelete = await api('/api/sponsor-ads/all', { token: adminToken });
+  check('ad list empty after delete', allAfterDelete.status === 200 && allAfterDelete.data.ads.length === 0);
+
+  const memberAll = await api('/api/sponsor-ads/all', { token: userToken });
+  check('member cannot list all ads (403)', memberAll.status === 403);
 }

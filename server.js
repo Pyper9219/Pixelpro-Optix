@@ -8,6 +8,7 @@ const depositRoutes = require('./routes/deposits');
 const notificationRoutes = require('./routes/notifications');
 const statsRoutes = require('./routes/stats');
 const adminRoutes = require('./routes/admin');
+const sponsorAdRoutes = require('./routes/sponsor-ads');
 const { load } = require('./lib/db');
 const { UPLOAD_DIR } = require('./lib/paths');
 
@@ -26,6 +27,7 @@ app.use('/api/deposits', depositRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/sponsor-ads', sponsorAdRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 

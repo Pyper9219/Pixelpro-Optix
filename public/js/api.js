@@ -24,6 +24,10 @@ const API = (() => {
     } catch {
       data = null;
     }
+    if (res.status === 401 && token) {
+      setToken(null);
+      window.dispatchEvent(new CustomEvent('riamxo:expired', { detail: (data && data.error) || '' }));
+    }
     if (!res.ok) {
       const err = new Error((data && data.error) || `Request failed (${res.status})`);
       err.status = res.status;

@@ -51,8 +51,23 @@ window.Aviator = (() => {
     let roundNo = 849200 + Math.floor(Math.random() * 700);
     let fairHash = `${hex4()}..${hex4()}`;
 
+    /* ---------- demo wallet ---------- */
+    const WALLET_KEY = 'riamxo_aviator_wallet';
+    const START_CREDITS = 10000;
+    let wallet = parseInt(localStorage.getItem(WALLET_KEY), 10);
+    if (!Number.isFinite(wallet)) wallet = START_CREDITS;
+    let earned = 0;
+    const flashTimers = [];
+
     /* ---------- DOM ---------- */
     const canvas = h('canvas');
+    const walletVal = h('b', { class: 'aw-val' }, fmtKES(wallet));
+    const earnedVal = h('b', { class: 'aw-val aw-plus' }, '+KES 0');
+    const accountVal = h('b', { class: 'aw-val' }, '—');
+    const walletBar = h('div', { class: 'av-wallet' },
+      h('div', { class: 'aw-cell' }, h('small', {}, icon('wallet', 13), 'Game balance'), walletVal),
+      h('div', { class: 'aw-cell' }, h('small', {}, icon('zap', 13), 'Earnings added'), earnedVal),
+      h('a', { class: 'aw-cell aw-link', href: '#/withdraw' }, h('small', {}, icon('cash', 13), 'Account balance'), accountVal));
     const overlayVal = h('div', { class: 'val waiting' }, `ROUND #${roundNo}`);
     const overlayCap = h('div', { class: 'cap neutral' }, 'PLACE YOUR BETS');
     const roundChipLabel = h('span', {}, `ROUND #${roundNo}`);
@@ -73,6 +88,7 @@ window.Aviator = (() => {
           h('span', { class: 'av-live' }, 'RIAMXO LIVE')),
         h('div', { class: 'av-marquee' },
           h('div', { class: 'av-marquee-track' }, marqueeGroup, marqueeGroup.cloneNode(true)))),
+      walletBar,
       historyBar,
       h('div', { class: 'aviator-stage' },
         h('div', { class: 'sunburst-bg' }),
@@ -93,7 +109,43 @@ window.Aviator = (() => {
 
     root.append(el);
     renderHistory();
+    loadAccountBalance();
     for (let i = 0; i < 6; i++) pushFeed(randomName(), (10 + Math.random() * 900) * (1 + Math.random() * 2));
+
+    function saveWallet() {
+      localStorage.setItem(WALLET_KEY, String(Math.round(wallet)));
+    }
+
+    function paintWallet() {
+      walletVal.textContent = fmtKES(wallet);
+      walletBar.classList.toggle('low', wallet < 100);
+    }
+
+    function fundBet(st) {
+      if (wallet < st.bet) return false;
+      wallet = round2(wallet - st.bet);
+      saveWallet();
+      paintWallet();
+      return true;
+    }
+
+    function creditWin(st) {
+      wallet = round2(wallet + st.win);
+      earned = round2(earned + st.win);
+      saveWallet();
+      paintWallet();
+      earnedVal.textContent = `+${fmtKES(earned)}`;
+      earnedVal.classList.remove('pop');
+      void earnedVal.offsetWidth;
+      earnedVal.classList.add('pop');
+      flashTimers.push(setTimeout(() => earnedVal.classList.remove('pop'), 700));
+    }
+
+    function loadAccountBalance() {
+      API.get('/api/stats/dashboard')
+        .then((s) => { if (!destroyed) accountVal.textContent = fmtKES(s.summary.available_balance); })
+        .catch(() => { if (!destroyed) accountVal.textContent = '—'; });
+    }
 
     function seedHistory() {
       const arr = [];
@@ -199,6 +251,10 @@ window.Aviator = (() => {
 
       function onBtn() {
         if (phase === 'waiting') {
+          if (!state.armed && state.bet > wallet) {
+            toast('Not enough game credits for that bet', 'error');
+            return;
+          }
           state.armed = !state.armed;
           if (!state.armed) state.autoBet = false;
           syncBtn();
@@ -211,6 +267,7 @@ window.Aviator = (() => {
         st.cashedOut = true;
         st.cashedMult = round2(multiplier);
         st.win = round2(st.bet * multiplier);
+        creditWin(st);
         pushFeed('You', st.win, multiplier);
         build();
       }
@@ -263,6 +320,12 @@ window.Aviator = (() => {
       phase = 'waiting';
       progress = 0;
       roundNo += 1;
+      if (wallet < 100) {
+        wallet = START_CREDITS;
+        saveWallet();
+        toast('Demo credits refilled to ' + fmtKES(START_CREDITS));
+      }
+      paintWallet();
       fairHash = `${hex4()}..${hex4()}`;
       fairHashEl.textContent = `SHA-256 Fair: ${fairHash}`;
       roundChipLabel.textContent = `ROUND #${roundNo}`;
@@ -296,7 +359,8 @@ window.Aviator = (() => {
       flyStart = performance.now();
       panels.forEach((p) => {
         const st = p.state;
-        st.live = st.armed || st.autoBet;
+        st.live = (st.armed || st.autoBet) && fundBet(st);
+        if (!st.live) st.armed = false;
         st.cashedOut = false;
         st.win = 0;
         if (st.cashedOut || !st.live) p.rebuild(); else p.syncBtn();
@@ -550,6 +614,7 @@ window.Aviator = (() => {
         destroyed = true;
         clearTimeout(phaseTimer);
         fakeTimers.forEach(clearTimeout);
+        flashTimers.forEach(clearTimeout);
         cancelAnimationFrame(raf);
         window.removeEventListener('resize', onResize);
       },
