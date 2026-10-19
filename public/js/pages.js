@@ -413,7 +413,7 @@ window.Pages = (() => {
                   h('div', { class: `aic ${a.status === 'approved' ? 'sic-green' : a.status === 'pending' ? 'sic-gold' : 'sic-red'}` },
                     icon(a.status === 'approved' ? 'check' : a.status === 'pending' ? 'clock' : 'x', 17)),
                   h('div', {}, h('b', {}, `${a.method} withdrawal`), h('small', {}, timeAgo(a.created_at))),
-                  h('div', { class: 'act-amt' }, h('b', {}, fmtKES(a.amount)), statusPill(a.status)))))));
+                  h('div', { class: 'act-amt' }, h('b', {}, fmtKES(a.amount)), statusPill(a.status, { approved: 'Successful' })))))));
 
       Charts.renderStackedArea(page.querySelector('#dash-trend'), stats.trend, [
         { key: 'approved', label: 'Approved', color: '#22c55e' },
@@ -455,7 +455,7 @@ window.Pages = (() => {
   function withdraw() {
     const page = h('div', { class: 'page page-pad' },
       h('h1', { class: 'page-title' }, 'Withdraw Funds'),
-      h('p', { class: 'page-sub' }, 'Cash out your earnings to M-Pesa or bank. Requests are reviewed within 24 hours.'),
+      h('p', { class: 'page-sub' }, 'Cash out your earnings to M-Pesa or bank. Every request must be approved by an admin before it is successful.'),
       h('div', { id: 'wd-body', style: { marginTop: '18px' } }, h('div', { class: 'spinner' })));
 
     const body = page.querySelector('#wd-body');
@@ -472,6 +472,8 @@ window.Pages = (() => {
 
         h('div', { class: 'form-panel', style: { marginTop: '18px' } },
           h('h3', {}, 'New withdrawal request'),
+          h('p', { style: { color: 'var(--muted)', fontSize: '0.8rem', margin: '0 0 12px' } },
+            'Your request is held as "Awaiting Approval" and deducted from your available balance. An admin reviews it, and only approved withdrawals are marked Successful and paid out.'),
           buildWithdrawForm(available)),
 
         h('div', { class: 'panel', style: { marginTop: '18px' } },
@@ -487,7 +489,7 @@ window.Pages = (() => {
                   h('td', {}, w.phone_number),
                   h('td', {}, w.method),
                   h('td', {}, fmtDate(w.created_at)),
-                  h('td', {}, statusPill(w.status)))))))));
+                  h('td', {}, statusPill(w.status, { approved: 'Successful' })))))))));
 
       function buildWithdrawForm(maxAmount) {
         const err = h('div', { class: 'error-text', style: { display: 'none' } });
@@ -510,7 +512,7 @@ window.Pages = (() => {
                 method: method.value,
                 notes: notes.value.trim(),
               });
-              toast('Withdrawal request submitted. It is now pending review.');
+              toast('Withdrawal submitted — it now awaits admin approval.');
               App.rerender();
             } catch (e) {
               err.textContent = e.message;
@@ -715,7 +717,7 @@ window.Pages = (() => {
     function openFaq() {
       const faqs = [
         ['How much do I earn per view?', 'KES 100 for every verified view of the sponsor ad on your WhatsApp status.'],
-        ['When can I withdraw?', 'Any time your available balance is at least KES 100. Requests are processed within 24 hours.'],
+        ['When can I withdraw?', 'Any time your available balance is at least KES 100. Requests are approved by our admin team, usually within 24 hours.'],
         ['How do I activate my account?', 'Pay your package fee to our M-Pesa paybill (0104074325) and submit the transaction code on the Deposit page.'],
         ['Why is there a 24-hour rule on submissions?', 'Each ad must stay on your status for 24 hours, so view counts can only be submitted once per day.'],
       ];

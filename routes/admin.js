@@ -31,7 +31,11 @@ router.post('/withdrawals/:id/:action', (req, res) => {
   if (!w) return res.status(404).json({ error: 'Withdrawal not found' });
   if (w.status !== 'pending') return res.status(409).json({ error: 'Already processed' });
   const status = action === 'approve' ? 'approved' : 'rejected';
-  const updated = db.collection('withdrawals').update(id, { status });
+  const updated = db.collection('withdrawals').update(id, {
+    status,
+    reviewed_by: req.user.id,
+    reviewed_at: new Date().toISOString(),
+  });
   db.collection('notifications').insert({
     user_id: w.user_id,
     icon: action === 'approve' ? '✅' : '❌',

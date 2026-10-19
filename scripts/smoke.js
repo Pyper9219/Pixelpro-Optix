@@ -145,11 +145,15 @@ async function runSuite() {
   const guard = await api('/api/admin/pending', { token: userToken });
   check('member blocked from admin API (403)', guard.status === 403);
 
+  const memberAct = await api(`/api/admin/withdrawals/${wd.data.withdrawal.id}/approve`, { method: 'POST', token: userToken });
+  check('member cannot approve withdrawals (403)', memberAct.status === 403);
+
   const pending = await api('/api/admin/pending', { token: adminToken });
   check('admin sees pending items', pending.status === 200 && pending.data.withdrawals.length >= 1 && pending.data.deposits.length >= 1);
 
   const apWd = await api(`/api/admin/withdrawals/${wd.data.withdrawal.id}/approve`, { method: 'POST', token: adminToken });
   check('admin approves withdrawal', apWd.status === 200 && apWd.data.withdrawal.status === 'approved');
+  check('approval records reviewer + timestamp', !!(apWd.data.withdrawal.reviewed_by && apWd.data.withdrawal.reviewed_at));
 
   const apDep = await api(`/api/admin/deposits/${dep.data.deposit.id}/approve`, { method: 'POST', token: adminToken });
   check('admin approves activation', apDep.status === 200 && apDep.data.deposit.status === 'approved');
@@ -157,6 +161,16 @@ async function runSuite() {
   const stats3 = await api('/api/stats/dashboard', { token: userToken });
   check('post-approval balance = 8000', stats3.data.summary.available_balance === 8000);
   check('membership package now Gold Agent', stats3.data.membership.current_package === 'Gold Agent');
+
+  // rejection: funds must return to available balance
+  const wd2 = await api('/api/withdrawals', { method: 'POST', token: userToken, body: { amount: 1000, phone_number: '0733111222', method: 'M-Pesa' } });
+  check('second withdrawal created (pending)', wd2.status === 201 && wd2.data.withdrawal.status === 'pending');
+  const stats4 = await api('/api/stats/dashboard', { token: userToken });
+  check('pending deducted again (available 7000)', stats4.data.summary.available_balance === 7000);
+  const rjWd = await api(`/api/admin/withdrawals/${wd2.data.withdrawal.id}/reject`, { method: 'POST', token: adminToken });
+  check('admin rejects withdrawal', rjWd.status === 200 && rjWd.data.withdrawal.status === 'rejected');
+  const stats5 = await api('/api/stats/dashboard', { token: userToken });
+  check('rejected funds return to available (8000)', stats5.data.summary.available_balance === 8000);
 
   // notifications
   const notifs = await api('/api/notifications', { token: userToken });

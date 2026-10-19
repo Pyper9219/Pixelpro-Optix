@@ -124,8 +124,9 @@ function timeAgo(iso) {
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
 
-function statusPill(status) {
-  return h('span', { class: `pill pill-${status}` }, status);
+function statusPill(status, labels = {}) {
+  const map = { pending: 'Awaiting Approval', approved: 'Approved', rejected: 'Rejected', ...labels };
+  return h('span', { class: `pill pill-${status}` }, map[status] || status);
 }
 
 function copyText(text, label = 'Copied to clipboard') {
